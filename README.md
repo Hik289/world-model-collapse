@@ -9,7 +9,23 @@
   <a href="https://arxiv.org/abs/2606.31399"><img src="https://img.shields.io/badge/arXiv-2606.31399-b31b1b.svg" alt="arXiv"></a>
   <a href="https://arxiv.org/pdf/2606.31399"><img src="https://img.shields.io/badge/PDF-paper-blue.svg" alt="PDF"></a>
   <a href="https://doi.org/10.48550/arXiv.2606.31399"><img src="https://img.shields.io/badge/DOI-10.48550%2FarXiv.2606.31399-lightgrey.svg" alt="DOI"></a>
+  <a href="https://github.com/Hik289/world-model-collapse"><img src="https://img.shields.io/badge/GitHub-code-181717.svg" alt="GitHub"></a>
+  <a href="#citation"><img src="https://img.shields.io/badge/Cite-BibTeX-64748b.svg" alt="Citation"></a>
+</p>
+
+<p align="center">
+  <a href="#installation"><img src="https://img.shields.io/badge/Install-pip%20%7C%20editable-2ea44f.svg" alt="Installation"></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Quickstart-smoke%20test-0ea5e9.svg" alt="Quick Start"></a>
+  <a href="#experiments"><img src="https://img.shields.io/badge/Experiments-phase%20scans-2563eb.svg" alt="Experiments"></a>
+  <a href="#analysis"><img src="https://img.shields.io/badge/Analysis-bootstrap%20%7C%20lags-7c3aed.svg" alt="Analysis"></a>
+  <a href="#reproducibility-notes"><img src="https://img.shields.io/badge/Reproducibility-deterministic-f97316.svg" alt="Reproducibility"></a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python">
+  <img src="https://img.shields.io/badge/models-OpenAI%20%7C%20Azure%20%7C%20Bedrock-lightgrey.svg" alt="Model providers">
+  <img src="https://img.shields.io/badge/logging-JSONL-lightgrey.svg" alt="JSONL logging">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
 </p>
 
 <p align="center">
@@ -217,4 +233,4 @@ The episode runner logs both per-step and per-episode records. Per-step records 
 
 ## License
 
-Add your preferred license before publishing if this repository will be distributed publicly.
+This project is released under the MIT License. See [LICENSE](LICENSE).
