@@ -16,7 +16,7 @@
   A deterministic evaluation suite for studying when long-horizon language agents preserve an internal world model, and when that world model abruptly collapses.
 </p>
 
-![Phase diagram of LLM agent performance](1.png)
+![Phase diagram of LLM agent performance](fig_intuition.png)
 
 ## Overview
 
