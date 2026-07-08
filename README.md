@@ -17,7 +17,7 @@
   A deterministic evaluation suite for studying when long-horizon language agents preserve an internal world model, and when that world model abruptly collapses.
 </p>
 
-![Phase diagram of LLM agent performance](fig_intuition.png)
+![Phase diagram of LLM agent performance](fig_intuition.webp)
 
 The figure shows the core intuition behind the experiments: as task stress increases, agent success can move from a stable regime into a narrow transition zone and then fall onto a collapse floor. The scans in this repository test where that boundary appears under different state sizes, dependency densities, horizons, and model settings.
 
