@@ -7,8 +7,6 @@
 
 <p align="center">
   <a href="https://arxiv.org/abs/2606.31399"><img src="https://img.shields.io/badge/arXiv-2606.31399-b31b1b.svg" alt="arXiv"></a>
-  <a href="https://arxiv.org/pdf/2606.31399"><img src="https://img.shields.io/badge/PDF-paper-blue.svg" alt="PDF"></a>
-  <a href="https://doi.org/10.48550/arXiv.2606.31399"><img src="https://img.shields.io/badge/DOI-10.48550%2FarXiv.2606.31399-lightgrey.svg" alt="DOI"></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
 </p>
