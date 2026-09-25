@@ -11,7 +11,7 @@ Verifies:
 Spec:
   - 5 ep × gpt-4o-mini × stateful_puzzle × dd=4 × Regime III backdrop
   - state_card=10 (Stage 5 mid-axis)
-  - task_seed namespace 700000-base (fresh, no overlap with P0/P1/P2/P4/Stage4)
+  - task_seed namespace 700000-base (fresh, no overlap with P0/P2/P4/Stage4)
   - decoding_seed=42, n_workers=2
 
 Verdict:

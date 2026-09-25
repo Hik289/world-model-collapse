@@ -1,7 +1,6 @@
 """Base Environment contract — EXP_PLAN v2.1 §2.1.
 
-All three rule-based environments (graph_nav, tool_dag, stateful_puzzle)
-implement this contract. Deterministic by construction:
+The StatefulPuzzle environment implements this contract. Deterministic by construction:
 
   - All randomness flows through a per-environment `random.Random(seed)` instance
     created in `reset()`. No global RNG access. No wallclock. No uuid.

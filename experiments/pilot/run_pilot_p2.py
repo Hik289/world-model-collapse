@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Run Pilot Slice P2 — cross-env dep_density replication.
+"""Run Pilot Slice P2 — StatefulPuzzle dep_density sweep.
 
 Director Path C1 (2026-05-30):
-  - tool_dag + stateful_puzzle × dep_density {1,2,4,6} × mini × 10 task × 1 seed = 80 ep
-  - Budget $8.8 (per EXP_PLAN §5.3), ~5-6h ETA
+  - stateful_puzzle × dep_density {1,2,4,6} × mini × 10 task × 1 seed = 40 ep
   - No STOP rule (any result is informative, just report Director)
-  - No auto-launch P3-P5
 
 Outputs:
   - experiments/pilot/p2_results.json
@@ -13,7 +11,6 @@ Outputs:
   - cost_tracker.jsonl appended
 
 Backdrop: Regime III (state_card=10, branching=4, obs=clean, mut=static, T=40)
-  — same as P1 for direct comparability.
 """
 
 from __future__ import annotations
@@ -38,7 +35,7 @@ P2_BACKDROP = {
     "obs_noise": "clean", "mut_rate": "static",
 }
 P2_DEP_LEVELS = [1, 2, 4, 6]
-P2_ENVS = ["tool_dag", "stateful_puzzle"]
+P2_ENVS = ["stateful_puzzle"]
 MODEL = "gpt-4o-mini"
 MEMORY_MODE = "C_struct"
 
@@ -53,9 +50,8 @@ def build_p2_cells(n_task_per_level: int = 10, decoding_seed: int = 42) -> list[
         for level in P2_DEP_LEVELS:
             stress = dict(P2_BACKDROP, dep_density=level)
             for i in range(n_task_per_level):
-                # Different namespace from P1 task_seeds: 400000 + env_offset + level*10000 + i
-                env_offset = 100000 if env == "stateful_puzzle" else 0
-                task_seed = 400000 + env_offset + level * 10000 + i
+                # Preserve the original StatefulPuzzle seed namespace.
+                task_seed = 500000 + level * 10000 + i
                 cells.append(CellSpec(
                     env_name=env,
                     model=MODEL,
@@ -186,11 +182,11 @@ def main() -> int:
     ct = CostTracker(
         out_path=log_dir / "cost_tracker.jsonl",
         phase="pilot",
-        slice_name="pilot_p2_cross_env_dep_density",
+        slice_name="pilot_p2_stateful_puzzle_dep_density",
         emit_every=10,
     )
     cells = build_p2_cells(n_task_per_level=args.n_task)
-    print(f"[pilot] === P2 START (cross-env: 2 envs × 4 dep_density × {args.n_task} task = {len(cells)} ep) ===")
+    print(f"[pilot] === P2 START (StatefulPuzzle × 4 dep_density × {args.n_task} task = {len(cells)} ep) ===")
 
     def progress(i, n, o: EpisodeOutcome):
         tag = "OK" if o.error is None else "ERR"
@@ -238,10 +234,6 @@ def main() -> int:
             print(f"    Δp̂(L{d['pair_lower_level']}→L{d['pair_upper_level']}) = {d['delta_pp']:+.1f}pp "
                   f"({d['success_rate_lower']:.0%} → {d['success_rate_upper']:.0%})")
         print(f"    max adjacent Δp̂ = {info.get('max_adjacent_delta_pp',0):.1f}pp")
-
-    # Compare to P1 graph_nav
-    print("\n  [comparison] P1 graph_nav (Step 1+2 merged for L4, L6 / Step 1 only for L1, L2):")
-    print(f"    graph_nav: L1=40% L2=60% L4=67% L6=47% (shape=hump per STAGE-3-009)")
 
     print(f"\n[pilot] cost_tracker triggered? {ct.is_stopped()} reason='{ct.stop_reason()}'")
     return 0

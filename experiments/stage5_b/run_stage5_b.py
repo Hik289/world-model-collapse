@@ -37,7 +37,7 @@ from src.runner import (  # noqa: E402
 )
 
 
-SLICE_NAME = "stage5_b_full_grid_3env_mini"
+SLICE_NAME = "stage5_b_full_grid_stateful_puzzle_mini"
 SEEDS_PATH = ROOT / "experiments" / "stage5_b" / "stage5_b_task_seeds.json"
 OUT_DIR = ROOT / "experiments" / "stage5_b"
 LOG_DIR = ROOT / "data" / "raw_logs"
@@ -76,6 +76,8 @@ def save_completed(task_ids: set[str]) -> None:
 
 
 def cell_from_dict(d: dict) -> CellSpec:
+    if d["env"] != "stateful_puzzle":
+        raise ValueError("Stage 5 B requires StatefulPuzzle cells.")
     return CellSpec(
         env_name=d["env"],
         model=d["model"],
@@ -216,7 +218,7 @@ def _finalize(all_cells: list, outcomes: list, cost_cap_hit: bool = False,
         "model": "gpt-4o-mini",
         "env": "stateful_puzzle",
         "grid_axes": {
-            "envs": ["stateful_puzzle", "graph_nav", "tool_dag"],
+            "envs": ["stateful_puzzle"],
             "state_cards": [5, 10, 20, 40],
             "dep_densities": [1, 2, 4, 6],
             "n_task_per_cell": 100,
@@ -232,7 +234,7 @@ def _finalize(all_cells: list, outcomes: list, cost_cap_hit: bool = False,
     print(f"\n[stage5b] === DONE === wrote {RESULTS_PATH}")
     print(f"[stage5b] completed {len(uniq)}/{len(all_cells)} cells; final_cost=${final_cum_cost:.4f}")
     print()
-    for env in ["stateful_puzzle", "graph_nav", "tool_dag"]:
+    for env in ["stateful_puzzle"]:
         print(f"  -- {env} success_rate grid --")
         print(f"  {'sc\\dd':>6} | {'1':>6} {'2':>6} {'4':>6} {'6':>6}")
         for sc in [5, 10, 20, 40]:

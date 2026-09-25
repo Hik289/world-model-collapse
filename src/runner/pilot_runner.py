@@ -1,4 +1,4 @@
-"""Pilot runner — drives Pilot Slice P0 (Regime I baseline) and P1 (anchor_5).
+"""Pilot runner — drives StatefulPuzzle pilot slices and grid experiments.
 
 Approach:
   - For each (env, model, stress_config, task_seed, decoding_seed) cell, run

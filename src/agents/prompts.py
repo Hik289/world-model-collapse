@@ -27,9 +27,9 @@ PLANNER_SYS = (
     "OUTPUT FORMAT: a single JSON object only. No prose. No markdown fences. "
     "The object must contain exactly these keys: "
     '{"next_action": str, "required_preconditions": list[str], "expected_effects": list, "confidence": number in [0,1]}. '
-    "next_action must match one of the action templates exactly (e.g. 'move(n3)', 'call(tool_2)', 'go(room_1)', 'noop'). "
-    "required_preconditions lists facts that must hold for the action to succeed (e.g. 'hold(key_0)'). "
-    "expected_effects lists facts produced (e.g. 'at(n3)'). "
+    "next_action must match one of the action templates exactly (e.g. 'go(room_1)', 'open(ctr_0)', 'finish_subgoal(sg_0)', 'noop'). "
+    "required_preconditions lists facts that must hold for the action to succeed (e.g. 'open(ctr_0)'). "
+    "expected_effects lists facts produced (e.g. 'at(room_1)'). "
     "confidence is your subjective certainty in [0,1]."
 )
 
@@ -82,7 +82,7 @@ MODE_A_PLANNER_SYS = (
     "you must choose the next concrete action. "
     "Your output MUST be exactly two lines:\n"
     "  REASONING: <one or two sentences explaining your choice>\n"
-    "  ACTION: <one action string that matches one of the action templates exactly, e.g. move(n3), call(tool_2), open(ctr_0), noop>\n"
+    "  ACTION: <one action string that matches one of the action templates exactly, e.g. go(room_1), open(ctr_0), finish_subgoal(sg_0), noop>\n"
     "The ACTION line is mandatory. It MUST be a single template instance, nothing else, no quotes, no JSON."
 )
 
@@ -245,75 +245,10 @@ def self_diag_user(
 
 
 # ---------------------------------------------------------------------------
-# Anchor_3 fixture prompts (5 templates × 10 repeats per call_type).
-# Each template embeds 1 scenario: normal / missing precondition / nested array.
-# Covered envs: graph_nav (gn), tool_dag (td), stateful_puzzle (sp).
+# Anchor_3 fixture prompts for the StatefulPuzzle warm-up scenario.
 # ---------------------------------------------------------------------------
 
 # Fixture observation+state pairs (kept small to bound token cost).
-_FIX_GN_NORMAL = {
-    "obs_text": "At n0. Inventory: ['key_0']. Open subgoals: ['reach(n2)'].",
-    "obs_partial": {
-        "objects": {"n0": {"type": "node", "props": {}}, "n2": {"type": "node", "props": {"is_goal": True}}},
-        "locations": {"n0": {"type": "node", "contents": []}},
-        "relations": [{"subj": "agent", "rel": "at", "obj": "n0"}, {"subj": "n0", "rel": "adjacent", "obj": "n1"}],
-        "inventory": ["key_0"], "open_subgoals": ["reach(n2)"], "completed_subgoals": [],
-        "blocked_dependencies": [], "beliefs": [],
-    },
-    "templates": ["move(n0)", "move(n1)", "move(n2)", "pick(key_0)", "drop(key_0)", "noop"],
-}
-
-_FIX_GN_MISSING = {
-    "obs_text": "At n0. Door door_0 between n0 and n1 is locked. Need switch_0 on AND hold(key_0). Inventory: [].",
-    "obs_partial": {
-        "objects": {"door_0": {"type": "door", "props": {"unlocked": False}}, "key_0": {"type": "key", "props": {"location": "n2"}}},
-        "locations": {"n0": {"type": "node", "contents": ["switch_0"]}},
-        "relations": [{"subj": "agent", "rel": "at", "obj": "n0"}],
-        "inventory": [], "open_subgoals": ["reach(n1)"], "completed_subgoals": [],
-        "blocked_dependencies": [{"action": "unlock(door_0)", "missing": ["hold(key_0)", "switch_on(switch_0)"]}],
-        "beliefs": [],
-    },
-    "templates": ["unlock(door_0)", "turn_on(switch_0)", "move(n2)", "pick(key_0)", "noop"],
-}
-
-_FIX_GN_NESTED = {
-    "obs_text": "At n0. Multiple decoys: ['n3','n7']. Subgoals chain: ['reach(n5)','pickup(key_2)'].",
-    "obs_partial": {
-        "objects": {
-            "n0": {"type": "node", "props": {}},
-            "n3": {"type": "node", "props": {"decoy": True}},
-            "n7": {"type": "node", "props": {"decoy": True}},
-        },
-        "locations": {"n0": {"type": "node", "contents": []}},
-        "relations": [{"subj": "agent", "rel": "at", "obj": "n0"}],
-        "inventory": [],
-        "open_subgoals": ["reach(n5)", "pickup(key_2)"],
-        "completed_subgoals": [],
-        "blocked_dependencies": [],
-        "beliefs": [{"prop": "n3_is_decoy", "confidence": 0.9}],
-    },
-    "templates": ["move(n3)", "move(n7)", "move(n2)", "inspect(n3)", "noop"],
-}
-
-_FIX_TD_NORMAL = {
-    "obs_text": "Active vars: ['v0','v1']. Target var: TARGET (type TypeC). Open subgoals: ['finish(TARGET)'].",
-    "obs_partial": {
-        "objects": {
-            "v0": {"type": "variable", "props": {"data_type": "TypeA"}},
-            "v1": {"type": "variable", "props": {"data_type": "TypeB"}},
-            "tool_0": {"type": "tool", "props": {"output_type": "TypeC", "layer": 0, "input_types_str": "TypeA,TypeB"}},
-        },
-        "locations": {},
-        "relations": [],
-        "inventory": ["v0", "v1"],
-        "open_subgoals": ["finish(TARGET)"],
-        "completed_subgoals": [],
-        "blocked_dependencies": [],
-        "beliefs": [],
-    },
-    "templates": ["call(tool_0)", "inspect_var(v0)", "finish(TARGET)", "noop"],
-}
-
 _FIX_SP_NORMAL = {
     "obs_text": "In room_0. Inventory: ['item_0']. Open subgoals: ['sg_0'].",
     "obs_partial": {
@@ -335,10 +270,6 @@ _FIX_SP_NORMAL = {
 
 
 FIXTURES = [
-    ("gn_normal", _FIX_GN_NORMAL),
-    ("gn_missing", _FIX_GN_MISSING),
-    ("gn_nested", _FIX_GN_NESTED),
-    ("td_normal", _FIX_TD_NORMAL),
     ("sp_normal", _FIX_SP_NORMAL),
 ]
 
@@ -346,7 +277,7 @@ FIXTURES = [
 def build_anchor3_prompt(call_type: str, fixture_id: str) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for an anchor_3 warm-up call.
 
-    Picks one of the 5 fixtures and renders the appropriate user prompt.
+    Renders the StatefulPuzzle fixture as the appropriate user prompt.
     """
     fix_map = dict(FIXTURES)
     if fixture_id not in fix_map:

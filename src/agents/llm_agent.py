@@ -180,7 +180,7 @@ def _parse_planner_mode_a(text: str, action_templates: list[str]) -> tuple[str, 
 
     m = _ACTION_LINE_RE.search(text or "")
     candidate = m.group(1).strip().strip("'\"`") if m else ""
-    # Strip trailing punctuation, but preserve balanced parens (e.g. move(n3))
+    # Strip trailing punctuation, but preserve balanced parens (e.g. go(room_1))
     while candidate and candidate[-1] in ".,;":
         candidate = candidate[:-1]
     # If trailing ')' is unbalanced, strip it; otherwise keep.

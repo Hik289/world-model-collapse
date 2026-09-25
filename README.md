@@ -35,7 +35,7 @@ This makes it possible to distinguish **world-model failure** from ordinary acti
 
 ## Highlights
 
-- Deterministic planning environments with explicit gold states.
+- Deterministic StatefulPuzzle planning environment with explicit gold states.
 - LLM-backed and oracle-style agents under a shared interface.
 - Three-call agent loop: updater, planner, and self-diagnosis.
 - Canonical JSONL logging for per-step and per-episode analysis.
@@ -46,7 +46,7 @@ This makes it possible to distinguish **world-model failure** from ordinary acti
 
 ```text
 src/
-  environments/          Deterministic task families and shared environment API
+  environments/          StatefulPuzzle implementation and shared environment API
   agents/                Oracle agents, LLM agents, prompts, JSON parsing, API clients
   evaluation/            Episode runner, world-state metrics, JSONL logging
   runner/                Batch execution, cell specs, cost tracking
@@ -63,11 +63,7 @@ analysis/
   multiple-testing correction, and cluster bootstrap utilities
 ```
 
-Available environments are registered in `src.environments.ENV_REGISTRY`:
-
-- `graph_nav`
-- `tool_dag`
-- `stateful_puzzle`
+The environment is **StatefulPuzzle**, registered as `stateful_puzzle` in `src.environments.ENV_REGISTRY`.
 
 ## Installation
 
@@ -184,7 +180,7 @@ print(obs.text)
 
 ## Reproducibility Notes
 
-The environments are deterministic by construction: randomness flows through seeded per-environment RNG instances, state is canonicalized before hashing, and unordered structures are sorted before logging.
+StatefulPuzzle is deterministic by construction: randomness flows through seeded per-environment RNG instances, state is canonicalized before hashing, and unordered structures are sorted before logging.
 
 The episode runner logs both per-step and per-episode records. Per-step records include the agent world state, gold world state, action validity, world-state accuracy, self-check correctness, false progress, state staleness, and token usage. Episode records summarize final success, collapse indicators, mean metrics, and aggregate token/cost fields.
 

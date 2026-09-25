@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Run Pilot Slice P4 — haiku × 3 env × dep_density replication.
+"""Run Pilot Slice P4 — haiku × StatefulPuzzle × dep_density replication.
 
 Director Path D2 (2026-05-31):
-  - 3 env (graph_nav, tool_dag, stateful_puzzle) × dep_density {1,2,4,6} × haiku × 10 task = 120 ep
+  - stateful_puzzle × dep_density {1,2,4,6} × haiku × 10 task = 40 ep
   - via lab Anthropic proxy at 127.0.0.1:18801 (no $ cost)
-  - Regime III backdrop, same as P1/P2 for direct cross-model comparison
+  - Regime III backdrop, same as P2 for direct cross-model comparison
   - No STOP rule; report Director per-env per-model shape table
   - Monitor proxy throughput; <5 ep/min sustained → report Director
 
 Outputs:
-  - experiments/pilot/p4_results.json (+ comparison with P1+P2 mini)
+  - experiments/pilot/p4_results.json (+ comparison with P2 mini)
   - data/raw_logs/pilot_p4_{step,episode}.jsonl
 """
 
@@ -36,7 +36,7 @@ P4_BACKDROP = {
     "obs_noise": "clean", "mut_rate": "static",
 }
 P4_DEP_LEVELS = [1, 2, 4, 6]
-P4_ENVS = ["graph_nav", "tool_dag", "stateful_puzzle"]
+P4_ENVS = ["stateful_puzzle"]
 MODEL = "claude-haiku-4-5"
 MEMORY_MODE = "C_struct"
 
@@ -51,8 +51,8 @@ def build_p4_cells(n_task_per_level: int = 10, decoding_seed: int = 42) -> list[
         for level in P4_DEP_LEVELS:
             stress = dict(P4_BACKDROP, dep_density=level)
             for i in range(n_task_per_level):
-                env_offset = {"graph_nav": 0, "tool_dag": 200000, "stateful_puzzle": 400000}[env]
-                task_seed = 500000 + env_offset + level * 10000 + i
+                # Preserve the original StatefulPuzzle seed namespace.
+                task_seed = 900000 + level * 10000 + i
                 cells.append(CellSpec(
                     env_name=env,
                     model=MODEL,
@@ -145,25 +145,16 @@ def analyze_p4(outcomes: list[EpisodeOutcome]) -> dict:
 
 
 def cross_model_sign_consistency(p4_summary: dict) -> dict:
-    """Compare haiku shapes (P4) vs mini shapes (P1 + P2) per env.
+    """Compare haiku shapes (P4) vs mini shapes (P2) per env.
 
     Loads mini shapes from prior result files.
     """
     out_dir = ROOT / "experiments" / "pilot"
     mini_shapes: dict[str, str] = {}
-    # graph_nav: from P1 (hump per STAGE-3-009 v2)
-    p1_path = out_dir / "p1_results.json"
-    if p1_path.exists():
-        p1 = json.loads(p1_path.read_text())
-        rates = []
-        for lvl in sorted(int(k) for k in p1["per_level"].keys()):
-            rates.append(p1["per_level"][str(lvl)]["success_rate"])
-        mini_shapes["graph_nav"] = classify_shape(rates)
-    # tool_dag + stateful_puzzle: from P2
     p2_path = out_dir / "p2_results.json"
     if p2_path.exists():
         p2 = json.loads(p2_path.read_text())
-        for env in ("tool_dag", "stateful_puzzle"):
+        for env in P4_ENVS:
             info = p2["per_env"].get(env, {})
             mini_shapes[env] = info.get("shape", "?")
 
@@ -176,9 +167,7 @@ def cross_model_sign_consistency(p4_summary: dict) -> dict:
         # max-Δp̂ sign across model — positive = success drops with dep_density (H0-aligned)
         mini_drop = None
         haiku_drop = p4_summary["per_env"].get(env, {}).get("max_adjacent_delta_pp")
-        if env == "graph_nav" and p1_path.exists():
-            mini_drop = p1["max_adjacent_delta_pp"]
-        elif env in ("tool_dag", "stateful_puzzle") and p2_path.exists():
+        if p2_path.exists():
             mini_drop = p2["per_env"].get(env, {}).get("max_adjacent_delta_pp")
         rows.append({
             "env": env,
@@ -213,11 +202,11 @@ def main() -> int:
     ct = CostTracker(
         out_path=log_dir / "cost_tracker.jsonl",
         phase="pilot",
-        slice_name="pilot_p4_haiku_cross_env_dep_density",
+        slice_name="pilot_p4_haiku_stateful_puzzle_dep_density",
         emit_every=10,
     )
     cells = build_p4_cells(n_task_per_level=args.n_task)
-    print(f"[pilot] === P4 START (haiku × 3 env × 4 dep_density × {args.n_task} task = {len(cells)} ep) ===")
+    print(f"[pilot] === P4 START (haiku × StatefulPuzzle × 4 dep_density × {args.n_task} task = {len(cells)} ep) ===")
 
     t_start = time.perf_counter()
 
@@ -267,7 +256,7 @@ def main() -> int:
         json.dumps(summary, sort_keys=True, indent=2, ensure_ascii=False)
     )
 
-    print("\n[pilot] === P4 SUMMARY (haiku × 3 env × dep_density) ===")
+    print("\n[pilot] === P4 SUMMARY (haiku × StatefulPuzzle × dep_density) ===")
     for env in P4_ENVS:
         info = summary["per_env"].get(env, {})
         print(f"\n  -- {env} (shape={info.get('shape','?')}) --")
@@ -278,7 +267,7 @@ def main() -> int:
             print(f"    Δp̂(L{d['pair_lower_level']}→L{d['pair_upper_level']}) = {d['delta_pp']:+.1f}pp "
                   f"({d['success_rate_lower']:.0%} → {d['success_rate_upper']:.0%})")
 
-    print("\n  [G7-style sign-consistency table — mini (P1+P2) vs haiku (P4)] --")
+    print("\n  [G7-style sign-consistency table — mini (P2) vs haiku (P4)] --")
     print(f"  {'env':20s} | {'mini_shape':10s} {'haiku_shape':12s} | {'mini_max_drop':>14s} {'haiku_max_drop':>14s} | match")
     for row in cross["table"]:
         mini_d = f"{row['mini_max_drop_pp']:.1f}pp" if row['mini_max_drop_pp'] is not None else 'NA'
