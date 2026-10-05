@@ -1,8 +1,5 @@
 """Episode runner: drives the 3-call agent loop + per-step JSONL logging.
 
-EXP_PLAN §3.1 — each step:
-    Planner Call → Updater Call → Self-Diag Call → env.step(action)
-
 This runner is used for:
   (Stage 1) end-to-end smoke test with OracleAgent → produces JSONL data
   (Stage 2) LLM-backed agents
@@ -280,6 +277,14 @@ def run_episode(
             wallclock_ms=upd_ms + plan_ms + sd_ms,
             input_tokens_this_step=(upd_out.input_tokens + plan_out.input_tokens + sd_out.input_tokens),
             output_tokens_this_step=(upd_out.output_tokens + plan_out.output_tokens + sd_out.output_tokens),
+            env_name=env.name,
+            gold_world_state_before=gold_before,
+            call_diagnostics={
+                name: {"valid_json": out.valid_json, "retries": out.retries,
+                       "fallback_used": out.fallback_used,
+                       "system_fingerprint": out.extra.get("system_fingerprint", "")}
+                for name, out in (("updater", upd_out), ("planner", plan_out), ("self_diag", sd_out))
+            },
         )
         step_writer.write_record(record)
 
@@ -287,7 +292,7 @@ def run_episode(
         total_out += record.output_tokens_this_step
 
         last_action = next_action
-        last_outcome = {"valid": action_valid, "validity_reason": gold_before is not None}
+        last_outcome = {"valid": action_valid, "validity_reason": validity_gold.reason}
         history.append({"step": t, "action": next_action, "valid": action_valid})
 
         obs = step_res.observation
@@ -330,6 +335,7 @@ def run_episode(
         total_input_tokens=total_in,
         total_output_tokens=total_out,
         total_cost_usd=0.0,
+        env_name=env.name,
     )
     episode_writer.write_record(summary)
     return {"summary": summary, "steps": t, "success": successful}

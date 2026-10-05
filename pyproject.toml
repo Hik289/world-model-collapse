@@ -16,5 +16,9 @@ dependencies = [
     "boto3>=1.34.0",
 ]
 
+[project.optional-dependencies]
+analysis = ["matplotlib>=3.6"]
+test = ["scipy>=1.10"]
+
 [tool.setuptools]
 packages = ["src", "src.agents", "src.environments", "src.evaluation", "src.runner"]

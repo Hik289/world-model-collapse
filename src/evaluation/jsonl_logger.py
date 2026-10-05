@@ -59,6 +59,9 @@ class StepLogRecord:
     wallclock_ms: int
     input_tokens_this_step: int
     output_tokens_this_step: int
+    env_name: str = ""
+    gold_world_state_before: dict = field(default_factory=dict)
+    call_diagnostics: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -92,6 +95,7 @@ class EpisodeLogRecord:
     total_input_tokens: int
     total_output_tokens: int
     total_cost_usd: float
+    env_name: str = ""
 
 
 # ---------------------------------------------------------------------------

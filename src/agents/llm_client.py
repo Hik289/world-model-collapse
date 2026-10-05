@@ -78,13 +78,15 @@ class LLMClient:
         openai_api_key: str | None = None,
         anthropic_proxy_url: str = ANTHROPIC_PROXY_URL,
         request_timeout: float = 60.0,
+        fixed_temperature: float | None = None,
+        strict_api_errors: bool = False,
     ):
         api_key = openai_api_key or os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise RuntimeError("OPENAI_API_KEY not set in env")
-        self.oai = OpenAI(api_key=api_key, timeout=request_timeout)
+        self.oai = OpenAI(api_key=api_key, timeout=request_timeout) if api_key else None
         self.anthropic_url = anthropic_proxy_url
         self.timeout = request_timeout
+        self.fixed_temperature = fixed_temperature
+        self.strict_api_errors = strict_api_errors
         self._bedrock = None  # lazy initialised on first bedrock call
         # Azure OpenAI fallback (used for `azure:<deployment>` model strings).
         # Used by cross-harness Exp C.2 when primary OpenAI key is rate-limited.
@@ -167,6 +169,8 @@ class LLMClient:
         self, model: str, system_prompt: str, user_prompt: str,
         seed: int | None, temperature: float, max_tokens: int,
     ) -> RawCallResult:
+        if self.oai is None:
+            return RawCallResult(text="", api_error="OPENAI_API_KEY is not configured")
         t0 = time.perf_counter()
         try:
             kwargs: dict[str, Any] = {
@@ -214,6 +218,8 @@ class LLMClient:
             "Content-Type": "application/json",
             "anthropic-version": ANTHROPIC_VERSION,
         }
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            headers["x-api-key"] = os.environ["ANTHROPIC_API_KEY"]
         try:
             r = requests.post(self.anthropic_url, json=payload, headers=headers, timeout=self.timeout)
             r.raise_for_status()
@@ -345,6 +351,8 @@ class LLMClient:
             [None] * (max_retries + 1) if no_seed
             else [seed, (seed or 0) + 1, (seed or 0) + 2, (seed or 0) + 3]
         )
+        if self.fixed_temperature is not None:
+            attempt_temps = [self.fixed_temperature] * (max_retries + 1)
 
         total_in = 0
         total_out = 0
@@ -352,6 +360,7 @@ class LLMClient:
         last_text = ""
         last_err = ""
         fingerprint = ""
+        api_errors = 0
 
         for attempt in range(max_retries + 1):
             temp = attempt_temps[min(attempt, len(attempt_temps) - 1)]
@@ -371,6 +380,7 @@ class LLMClient:
                 fingerprint = raw.system_fingerprint
             last_text = raw.text
             if raw.api_error:
+                api_errors += 1
                 last_err = f"api_error_attempt_{attempt}:{raw.api_error}"
                 continue
             parsed, valid, err = parse_call_output(raw.text, call_type)
@@ -388,6 +398,8 @@ class LLMClient:
                 )
             last_err = err
 
+        if self.strict_api_errors and api_errors:
+            raise RuntimeError(f"{model}: {call_type} failed after API errors; episode incomplete")
         # All attempts failed → return fallback.
         return CallOutcome(
             parsed=_fallback_parsed(call_type),

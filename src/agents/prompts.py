@@ -109,7 +109,7 @@ def planner_user_mode_a(
         "CURRENT UNDERSTANDING (your own prose memory from prior step):",
         current_understanding or "(no prior understanding — this is the first step)",
         "",
-        f"AVAILABLE ACTION TEMPLATES (pick exactly one): {action_templates[:60]}",
+        f"AVAILABLE ACTION TEMPLATES (pick exactly one): {action_templates}",
     ]
     if history:
         recent = history[-5:]
@@ -186,7 +186,7 @@ def planner_user(
         "CURRENT WORLD STATE (structured):",
         _json_short(agent_world_state, limit=4000),
         "",
-        f"AVAILABLE ACTION TEMPLATES (use exactly one of these patterns): {action_templates[:60]}",
+        f"AVAILABLE ACTION TEMPLATES (use exactly one of these patterns): {action_templates}",
     ]
     if history:
         recent = history[-5:]
