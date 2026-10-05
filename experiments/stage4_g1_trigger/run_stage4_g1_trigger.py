@@ -26,6 +26,9 @@ Cost-tracker 0 verify:
 from __future__ import annotations
 
 import argparse
+import contextlib
+import hashlib
+import itertools
 import json
 import os
 import sys
@@ -162,7 +165,7 @@ def analyze_stage4(outcomes: list[EpisodeOutcome]) -> dict:
     return out
 
 
-def main() -> int:
+def legacy_main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--n-workers", type=int, default=4)
     ap.add_argument("--checkpoint-every", type=int, default=50)
@@ -274,7 +277,7 @@ def _finalize(all_cells: list, outcomes: list) -> int:
     print(f"[stage4] completed {len(uniq)}/{len(all_cells)} cells")
     # Compact 4x4 grid display
     print("\n  success_rate grid (rows=state_card, cols=dep_density):")
-    print(f"  {'sc\\dd':>6} | {'1':>6} {'2':>6} {'4':>6} {'6':>6}")
+    print("  {:>6} | {:>6} {:>6} {:>6} {:>6}".format("sc\\dd", 1, 2, 4, 6))
     for sc in [5, 10, 20, 40]:
         row = [f"{sc:>6}"]
         for dd in [1, 2, 4, 6]:
@@ -284,6 +287,320 @@ def _finalize(all_cells: list, outcomes: list) -> int:
             row.append(f"{sr:>6.0%}" if sr is not None else "  N/A")
         print("  " + " ".join(row).replace(" | ", " | ", 1) + " |")
     return 0
+
+
+PAPER_CONFIGS = {'ablations': {'name': 'paper_ablations',
+               'seed_namespace': 'world-model-collapse-main42-v1-ablations',
+               'environments': ['stateful_puzzle'],
+               'models': ['claude-haiku-4-5'],
+               'archetypes': 10,
+               'variants': 10,
+               'decoding_seed': 42,
+               'sweeps': [{'state_size': [10],
+                           'state_dependency': [6],
+                           'horizon': [10, 20, 40, 80],
+                           'branching': [4],
+                           'observation': ['clean'],
+                           'mutation': ['static']},
+                          {'state_size': [10],
+                           'state_dependency': [6],
+                           'horizon': [40],
+                           'branching': [2, 4, 8, 16],
+                           'observation': ['clean'],
+                           'mutation': ['static']},
+                          {'state_size': [10],
+                           'state_dependency': [6],
+                           'horizon': [40],
+                           'branching': [4],
+                           'observation': ['clean', 'partial', 'distractor', 'conflict'],
+                           'mutation': ['static']},
+                          {'state_size': [10],
+                           'state_dependency': [6],
+                           'horizon': [40],
+                           'branching': [4],
+                           'observation': ['clean'],
+                           'mutation': ['static', 'low', 'medium', 'high']}]},
+ 'main_grid': {'name': 'paper_main_grid',
+               'seed_namespace': 'world-model-collapse-main42-v1-main_grid',
+               'environments': ['stateful_puzzle', 'graph_nav', 'tool_dag'],
+               'models': ['claude-haiku-4-5', 'gpt-4o-mini'],
+               'archetypes': 10,
+               'variants': 10,
+               'decoding_seed': 42,
+               'sweeps': [{'state_size': [5, 10, 20, 40],
+                           'state_dependency': [1, 2, 4, 6],
+                           'horizon': [40],
+                           'branching': [4],
+                           'observation': ['clean'],
+                           'mutation': ['static']}]},
+ 'pilot_sd': {'name': 'paper_pilot_sd',
+              'seed_namespace': 'world-model-collapse-main42-v1-pilot_sd',
+              'environments': ['stateful_puzzle', 'graph_nav', 'tool_dag'],
+              'models': ['claude-haiku-4-5', 'gpt-4o-mini'],
+              'archetypes': 10,
+              'variants': 1,
+              'decoding_seed': 42,
+              'sweeps': [{'state_size': [10],
+                          'state_dependency': [1, 2, 4, 6],
+                          'horizon': [40],
+                          'branching': [4],
+                          'observation': ['clean'],
+                          'mutation': ['static']}]},
+ 'ss_fine': {'name': 'paper_ss_fine',
+             'seed_namespace': 'world-model-collapse-main42-v1-ss_fine',
+             'environments': ['stateful_puzzle'],
+             'models': ['claude-haiku-4-5', 'gpt-4o-mini', 'gpt-4o', 'meta.llama3-70b-instruct-v1:0'],
+             'archetypes': 10,
+             'variants': 5,
+             'decoding_seed': 42,
+             'sweeps': [{'state_size': [5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 40],
+                         'state_dependency': [1],
+                         'horizon': [40],
+                         'branching': [4],
+                         'observation': ['clean'],
+                         'mutation': ['static']}]},
+ 't_fine': {'name': 'paper_t_fine',
+            'seed_namespace': 'world-model-collapse-main42-v1-t_fine',
+            'environments': ['stateful_puzzle'],
+            'models': ['claude-haiku-4-5'],
+            'archetypes': 10,
+            'variants': 5,
+            'decoding_seed': 42,
+            'sweeps': [{'state_size': [10],
+                        'state_dependency': [6],
+                        'horizon': [22, 25, 28, 30, 32, 35, 38, 42, 48, 55, 65],
+                        'branching': [4],
+                        'observation': ['clean'],
+                        'mutation': ['static']}]}}
+
+
+PROTOCOL = "paper-main42-v1"
+ENVIRONMENTS = {"stateful_puzzle", "graph_nav", "tool_dag"}
+AXES = ("state_size", "state_dependency", "horizon", "branching", "observation", "mutation")
+LEGACY_KEYS = dict(zip(AXES, ("state_card", "dep_density", "T", "branching", "obs_noise", "mut_rate")))
+
+
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def digest(value):
+    return hashlib.sha256(canonical(value).encode()).hexdigest()
+
+
+def positive_int(value, name):
+    if type(value) is not int or value <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
+def load_config(path):
+    config = json.loads(canonical(path)) if isinstance(path, dict) else json.loads(Path(path).read_text())
+    required = {"name", "seed_namespace", "environments", "models", "archetypes", "variants", "decoding_seed", "sweeps"}
+    if set(config) != required:
+        raise ValueError(f"Config keys must be {sorted(required)}")
+    for key in ("name", "seed_namespace"):
+        if not isinstance(config[key], str) or not config[key].strip():
+            raise ValueError(f"{key} must be a nonempty string")
+    for key in ("environments", "models"):
+        values = config[key]
+        if not isinstance(values, list) or not values or any(not isinstance(v, str) or not v for v in values):
+            raise ValueError(f"Invalid {key}")
+        if len(values) != len(set(values)):
+            raise ValueError(f"Duplicate {key}")
+    if not set(config["environments"]) <= ENVIRONMENTS:
+        raise ValueError("Unknown environment")
+    for model in config["models"]:
+        if not model.startswith(("gpt-", "claude-", "azure:", "meta.", "us.meta.")):
+            raise ValueError(f"Unsupported provider prefix: {model}")
+    positive_int(config["archetypes"], "archetypes")
+    positive_int(config["variants"], "variants")
+    if type(config["decoding_seed"]) is not int or config["decoding_seed"] < 0:
+        raise ValueError("decoding_seed must be a nonnegative integer")
+    if not isinstance(config["sweeps"], list) or not config["sweeps"]:
+        raise ValueError("sweeps must be a nonempty list")
+    for sweep in config["sweeps"]:
+        if set(sweep) != set(AXES):
+            raise ValueError(f"Every sweep must specify {AXES}")
+        for key in AXES:
+            values = sweep[key]
+            if not isinstance(values, list) or not values or any(isinstance(v, (list, dict)) for v in values):
+                raise ValueError(f"Invalid sweep axis {key}")
+            if len(values) != len(set(values)):
+                raise ValueError(f"Duplicate levels in {key}")
+        for key in AXES[:4]:
+            for value in sweep[key]:
+                positive_int(value, key)
+        if not set(sweep["state_dependency"]) <= {1, 2, 4, 6}:
+            raise ValueError("Supported SD levels: 1, 2, 4, 6")
+        if not set(sweep["observation"]) <= {"clean", "partial", "distractor", "conflict"}:
+            raise ValueError("Unknown observation mode")
+        if not set(sweep["mutation"]) <= {"static", "low", "medium", "high"}:
+            raise ValueError("Unknown mutation mode")
+        levels = {5, 10, 20, 40}
+        if config["environments"] == ["stateful_puzzle"]:
+            levels.update(range(11, 20))
+        if not set(sweep["state_size"]) <= levels:
+            raise ValueError(f"State sizes supported by all selected environments: {sorted(levels)}")
+    return config
+
+
+def build_plan(config):
+    tasks, seen_seeds = {}, {}
+    for sweep in config["sweeps"]:
+        for values in itertools.product(*(sweep[key] for key in AXES)):
+            stress = dict(zip(AXES, values))
+            for env, archetype, variant in itertools.product(
+                config["environments"], range(config["archetypes"]), range(config["variants"])
+            ):
+                identity = {"namespace": config["seed_namespace"], "env_name": env,
+                            "stress": stress, "archetype": archetype, "variant": variant}
+                task_id = digest(identity)
+                seed = int(task_id[:16], 16)
+                if seed in seen_seeds and seen_seeds[seed] != task_id:
+                    raise ValueError("SHA-256 seed prefix collision")
+                seen_seeds[seed] = task_id
+                legacy_stress = {LEGACY_KEYS[k]: v for k, v in stress.items()}
+                tasks[task_id] = {"task_id": task_id, "task_seed": seed, "env_name": env,
+                                  "stress": stress, "stress_config": legacy_stress,
+                                  "task_config": {"archetype": f"archetype_{archetype:02d}",
+                                                  "variant": variant, "stress_config": legacy_stress}}
+    jobs = []
+    for task in tasks.values():
+        for model in config["models"]:
+            job = {**task, "model": model, "decoding_seed": config["decoding_seed"]}
+            job["job_id"] = digest({"task_id": task["task_id"], "model": model,
+                                    "decoding_seed": config["decoding_seed"], "protocol": PROTOCOL})
+            jobs.append(job)
+    return {"protocol": PROTOCOL, "config": config, "config_hash": digest(config),
+            "unique_tasks": len(tasks), "episode_count": len(jobs), "jobs": jobs}
+
+
+def atomic_json(path, value):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n")
+    temporary.replace(path)
+
+
+def read_jsonl(path):
+    path = Path(path)
+    if not path.exists():
+        return []
+    rows = []
+    for lineno, line in enumerate(path.read_text().splitlines(), 1):
+        if line.strip():
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Malformed JSONL at {path}:{lineno}") from exc
+    return rows
+
+
+def source_digest():
+    root = Path(__file__).resolve().parents[2]
+    sources = sorted((root / "src").rglob("*.py")) + [Path(__file__).resolve(), root / "analysis/stage4_g1_acceptance.py"]
+    return digest({str(p.relative_to(root)): p.read_text() for p in sources})
+
+
+@contextlib.contextmanager
+def output_lock(directory):
+    import fcntl
+    path = directory / ".run.lock"
+    with path.open("a") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise RuntimeError(f"Another run is using {directory}") from exc
+        yield
+
+
+class BufferWriter:
+    def __init__(self):
+        self.rows = []
+
+    def write_record(self, record):
+        from dataclasses import asdict
+        self.rows.append(asdict(record) if not isinstance(record, dict) else record)
+
+
+def execute(plan, directory, max_episodes=None):
+
+    from src.agents.llm_client import LLMClient
+    from src.agents.llm_agent import build_llm_agent
+    from src.environments import ENV_REGISTRY
+    from src.evaluation.runner import EpisodeContext, run_episode
+
+    client = LLMClient(fixed_temperature=0.0, strict_api_errors=True)
+    completed_dir = directory / "episodes"
+    completed_dir.mkdir(exist_ok=True)
+    done = {p.stem for p in completed_dir.glob("*.json")}
+    planned_ids = {job["job_id"] for job in plan["jobs"]}
+    if done - planned_ids:
+        raise ValueError("Output directory contains episodes outside this manifest")
+    remaining = [job for job in plan["jobs"] if job["job_id"] not in done]
+    selected = remaining if max_episodes is None else remaining[:max_episodes]
+    for index, job in enumerate(selected, 1):
+        try:
+            env = ENV_REGISTRY[job["env_name"]]()
+            env.reset(job["task_config"], job["task_seed"])
+            agent = build_llm_agent(client, job["model"], env.get_meta().action_templates)
+            ctx = EpisodeContext(run_id=job["job_id"], task_id=job["task_id"],
+                                 task_seed=job["task_seed"], decoding_seed=job["decoding_seed"],
+                                 world_regime=plan["config"]["name"], stress_config=job["stress_config"])
+            steps, episodes = BufferWriter(), BufferWriter()
+            run_episode(env, agent, job["task_config"], ctx, steps, episodes)
+            atomic_json(completed_dir / f"{job['job_id']}.json",
+                        {"protocol": plan["protocol"], "job": job,
+                         "episode": episodes.rows[0], "steps": steps.rows})
+        except Exception as exc:
+
+
+            with (directory / "errors.jsonl").open("a") as handle:
+                handle.write(canonical({"job_id": job["job_id"], "error_type": type(exc).__name__}) + "\n")
+            raise RuntimeError(f"Episode {job['job_id']} incomplete ({type(exc).__name__}); resume after resolving the error") from None
+        print(f"Completed {index}/{len(selected)}: {job['env_name']} {job['model']} "
+              f"SS={job['stress']['state_size']} SD={job['stress']['state_dependency']}", flush=True)
+    print(f"Stored {len(done) + len(selected)}/{plan['episode_count']} completed episodes")
+
+
+def paper_main():
+    parser = argparse.ArgumentParser(description="Three-environment paper experiment suites")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--suite", choices=sorted(PAPER_CONFIGS), default="main_grid")
+    source.add_argument("--config", type=Path)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--plan-only", action="store_true", help="Write manifest only; no environments or models are run")
+    parser.add_argument("--max-episodes", type=int, help="Maximum new episodes in this invocation")
+    args = parser.parse_args()
+    if args.max_episodes is not None and args.max_episodes <= 0:
+        parser.error("--max-episodes must be positive")
+    plan = build_plan(load_config(args.config if args.config else PAPER_CONFIGS[args.suite]))
+    plan["source_digest"] = source_digest()
+    args.output.mkdir(parents=True, exist_ok=True)
+    with output_lock(args.output):
+        manifest = args.output / "manifest.json"
+        if manifest.exists():
+            existing = json.loads(manifest.read_text())
+            if existing != plan:
+                raise ValueError("Configuration or implementation changed; use a new output directory")
+        else:
+            if any((args.output / "episodes").glob("*.json")):
+                raise ValueError("Cannot adopt existing episodes without their original manifest")
+            atomic_json(manifest, plan)
+        print(f"{plan['episode_count']} episodes, {plan['unique_tasks']} unique tasks; manifest: {manifest}")
+        if not args.plan_only:
+            execute(plan, args.output, args.max_episodes)
+
+
+def main():
+    if "--legacy" in sys.argv:
+        sys.argv.remove("--legacy")
+        return legacy_main()
+    if any(arg.split("=", 1)[0] in {"--n-workers", "--checkpoint-every", "--cost-verify-after"} for arg in sys.argv[1:]):
+        return legacy_main()
+    return paper_main()
 
 
 if __name__ == "__main__":

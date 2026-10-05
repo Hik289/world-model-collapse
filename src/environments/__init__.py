@@ -9,9 +9,7 @@ from .base import (
     canonicalize_world_state,
     empty_world_state,
 )
-from .stateful_puzzle import StatefulPuzzleEnv
-from .graph_nav import GraphNavEnv
-from .tool_dag import ToolDAGEnv
+from .stateful_puzzle import StatefulPuzzleEnv, GraphNavEnv, ToolDAGEnv
 
 ENV_REGISTRY = {
     "stateful_puzzle": StatefulPuzzleEnv,
