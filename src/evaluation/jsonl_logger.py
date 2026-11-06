@@ -1,30 +1,14 @@
-"""Per-step and per-episode JSONL logging (EXP_PLAN §3.3 / §3.4).
-
-Schemas include the P0-C patch fields:
-    task_seed, decoding_seed, wallclock_ms,
-    input_tokens_this_step, output_tokens_this_step
-
-Append-only, deterministic key ordering (sort_keys=True), one JSON object per line.
-"""
-
 from __future__ import annotations
-
 import json
+import threading
 import os
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-
 def _canonical_dumps(obj: Any) -> str:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
-
-# ---------------------------------------------------------------------------
-# Schemas (as dataclasses for type-safety; serialized via asdict).
-# Field set mirrors EXP_PLAN §3.3 / §3.4 verbatim.
-# ---------------------------------------------------------------------------
+    return json.dumps(obj, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
 
 @dataclass
 class StepLogRecord:
@@ -59,10 +43,9 @@ class StepLogRecord:
     wallclock_ms: int
     input_tokens_this_step: int
     output_tokens_this_step: int
-    env_name: str = ""
+    env_name: str = ''
     gold_world_state_before: dict = field(default_factory=dict)
     call_diagnostics: dict = field(default_factory=dict)
-
 
 @dataclass
 class EpisodeLogRecord:
@@ -95,31 +78,23 @@ class EpisodeLogRecord:
     total_input_tokens: int
     total_output_tokens: int
     total_cost_usd: float
-    env_name: str = ""
-
-
-# ---------------------------------------------------------------------------
-# JSONL writers (append-only, line-buffered).
-# ---------------------------------------------------------------------------
+    env_name: str = ''
 
 class JSONLWriter:
-    """Append-only JSONL writer with canonical key ordering.
-
-    Safe for sequential single-process use. For concurrent writers, use one
-    instance per run_id (we do this by run_id-shard in the runner).
-    """
 
     def __init__(self, path: str | os.PathLike[str]):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._fh = self.path.open("a", encoding="utf-8")
+        self._lock = threading.Lock()
+        self._fh = self.path.open('a', encoding='utf-8')
 
     def write_record(self, record: dict | StepLogRecord | EpisodeLogRecord) -> None:
         if isinstance(record, (StepLogRecord, EpisodeLogRecord)):
             record = asdict(record)
         line = _canonical_dumps(record)
-        self._fh.write(line + "\n")
-        self._fh.flush()
+        with self._lock:
+            self._fh.write(line + '\n')
+            self._fh.flush()
 
     def close(self) -> None:
         try:
@@ -132,3 +107,53 @@ class JSONLWriter:
 
     def __exit__(self, exc_type, exc, tb):
         self.close()
+
+def read_records(path):
+    import gzip
+    path = Path(path)
+    if not path.exists() and path.suffix != '.gz':
+        path = path.with_suffix(path.suffix + '.gz')
+    opener = gzip.open if path.suffix == '.gz' else open
+    with opener(path, 'rt', encoding='utf-8') as handle:
+        for number, line in enumerate(handle, 1):
+            if line.strip():
+                try:
+                    yield json.loads(line)
+                except json.JSONDecodeError:
+                    raise ValueError(f'Malformed JSONL at line {number}') from None
+
+def load_completed_traces(step_path, episode_path, exclude_empty=True):
+    metadata = {}
+    for record in read_records(episode_path):
+        identity = (record['task_id'], record.get('model', ''), record.get('decoding_seed'))
+        metadata[identity] = record
+    selected = {}
+    for identity, record in metadata.items():
+        key = (record['task_id'], record.get('run_id'), record.get('model', ''), record.get('decoding_seed'))
+        selected[key] = (identity, {})
+    for record in read_records(step_path):
+        key = (record['task_id'], record.get('run_id'), record.get('model', ''), record.get('decoding_seed'))
+        if key not in selected:
+            continue
+        identity, steps = selected[key]
+        index = record['step']
+        if index == 0 and steps:
+            steps.clear()
+        steps[index] = record
+    completed, excluded = ([], [])
+    for identity, steps_by_index in selected.values():
+        meta = metadata[identity]
+        steps = [steps_by_index[i] for i in sorted(steps_by_index)]
+        expected = meta.get('steps_taken', len(steps))
+        reason = None
+        if not steps or len(steps) != expected or [s['step'] for s in steps] != list(range(len(steps))):
+            reason = 'incomplete_steps'
+        elif len(steps) > meta.get('stress_config', {}).get('T', len(steps)):
+            reason = 'steps_exceed_horizon'
+        elif exclude_empty and any((s.get('output_tokens_this_step') == 0 for s in steps)):
+            reason = 'empty_model_response'
+        if reason:
+            excluded.append({'task_id': meta['task_id'], 'model': meta.get('model'), 'stress_config': meta.get('stress_config', {}), 'reason': reason})
+        else:
+            completed.append((meta, steps))
+    return (completed, excluded)

@@ -2,12 +2,11 @@
 
 <p align="center">
   <strong>World-Model Collapse as a Phase Transition</strong><br>
-  Xinyuan Song, Zekun Cai
 </p>
 
 <p align="center">
   <a href="https://arxiv.org/abs/2606.31399"><img src="https://img.shields.io/badge/arXiv-2606.31399-b31b1b.svg" alt="arXiv"></a>
-  <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python">
+  <img src="https://img.shields.io/badge/python-3.12%2B-blue.svg" alt="Python">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
 </p>
 
@@ -189,7 +188,6 @@ The episode runner logs both per-step and per-episode records. Per-step records 
 ```bibtex
 @article{song2026worldmodelcollapse,
   title   = {World-Model Collapse as a Phase Transition},
-  author  = {Song, Xinyuan and Cai, Zekun},
   journal = {arXiv preprint arXiv:2606.31399},
   year    = {2026},
   doi     = {10.48550/arXiv.2606.31399},

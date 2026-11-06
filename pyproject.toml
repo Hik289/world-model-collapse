@@ -7,7 +7,7 @@ name = "plancollapseworlds"
 version = "0.1.0"
 description = "Deterministic planning environments and runners for studying world-model collapse in LLM agents."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = { file = "LICENSE" }
 dependencies = [
     "openai>=1.50.0",
@@ -17,7 +17,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-analysis = ["matplotlib>=3.6"]
+analysis = ["matplotlib>=3.6", "scipy>=1.10", "pandas>=2.0"]
+realworld = ["scienceworld", "alfworld", "textworld"]
 test = ["scipy>=1.10"]
 
 [tool.setuptools]

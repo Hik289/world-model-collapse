@@ -40,3 +40,8 @@ cost_tracker*.jsonl
 *.zip
 *.tar
 *.tar.gz
+
+*.egg-info/
+*.audit.json
+experiments/**/runs/
+experiments/**/trace_runs/
